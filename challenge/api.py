@@ -1,3 +1,6 @@
+import logging
+import time
+
 import fastapi
 import pandas as pd
 from fastapi import Request
@@ -7,6 +10,8 @@ from pydantic import BaseModel, validator
 from typing import List, Literal
 
 from challenge.model import DelayModel
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 KNOWN_AIRLINES = {
     "Aerolineas Argentinas",
@@ -74,7 +79,15 @@ async def get_health() -> dict:
 
 @app.post("/predict", status_code=200)
 async def post_predict(request: PredictRequest) -> dict:
-    df = pd.DataFrame([flight.dict() for flight in request.flights])
+    flights_data = [flight.dict() for flight in request.flights]
+    logging.info("Predict request received | flights=%s", flights_data)
+
+    df = pd.DataFrame(flights_data)
+
+    t0 = time.perf_counter()
     features = _model.preprocess(df)
     predictions = _model.predict(features)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    logging.info("Predict result | predictions=%s | inference_time=%.2fms", predictions, elapsed_ms)
     return {"predict": predictions}

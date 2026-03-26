@@ -1,9 +1,14 @@
+import logging
+import os
+
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 
 from datetime import datetime
 from typing import Tuple, Union, List
+
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.xgb")
 
 THRESHOLD_IN_MINUTES = 15
 
@@ -75,6 +80,12 @@ class DelayModel:
         self
     ):
         self._model = None # Model should be saved in this attribute.
+        if os.path.exists(MODEL_PATH):
+            self._model = xgb.XGBClassifier()
+            self._model.load_model(MODEL_PATH)
+            logging.info("Model loaded from %s", MODEL_PATH)
+        else:
+            logging.warning("No trained model found at %s — predictions will return 0", MODEL_PATH)
 
     def preprocess(
         self,
@@ -142,6 +153,7 @@ class DelayModel:
             scale_pos_weight=scale,
         )
         self._model.fit(features, y)
+        self._model.save_model(MODEL_PATH)
 
     def predict(
         self,
