@@ -117,3 +117,41 @@ self.data = pd.read_csv(filepath_or_buffer="../../data/data.csv")
 test_model_preprocess_for_training  PASSED
 test_model_preprocess_for_serving   PASSED
 ```
+
+### 1.3 `fit()` Implementation (`challenge/model.py`)
+
+#### What was implemented
+
+The `fit()` method of `DelayModel` trains an `XGBClassifier` with class-balance compensation, following the `xgb_model_2` approach from notebook Section 6:
+
+```python
+def fit(self, features: pd.DataFrame, target: pd.DataFrame) -> None:
+    y = target.iloc[:, 0]
+    n_y0 = (y == 0).sum()
+    n_y1 = (y == 1).sum()
+    scale = n_y0 / n_y1
+
+    self._model = xgb.XGBClassifier(
+        random_state=1,
+        learning_rate=0.01,
+        scale_pos_weight=scale,
+    )
+    self._model.fit(features, y)
+```
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| `scale_pos_weight = n_y0 / n_y1` | Compensates for class imbalance (delayed vs. on-time flights); directly from notebook Section 6 formula |
+| `random_state=1`, `learning_rate=0.01` | Same hyperparameters used in the notebook's balanced XGBoost model (`xgb_model_2`) |
+| `target.iloc[:, 0]` | Flattens the single-column target DataFrame to a 1-D Series as required by XGBoost |
+| Trained on `TOP_FEATURES` only | `preprocess()` already filters to the top 10 features before `fit()` is called |
+
+#### Dependency added
+
+`xgboost` was imported at the module level:
+
+```python
+import xgboost as xgb
+```
