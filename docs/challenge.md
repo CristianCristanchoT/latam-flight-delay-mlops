@@ -205,3 +205,64 @@ test_model_preprocess_for_serving   PASSED
 test_model_fit                      PASSED
 test_model_predict                  PASSED
 ```
+
+---
+
+## Part II — REST API (`challenge/api.py`)
+
+### 2.1 Pydantic Models & Input Validation
+
+#### What was implemented
+
+Two Pydantic models were added to validate the request body of `POST /predict`:
+
+| Model | Fields | Validation |
+|---|---|---|
+| `FlightInput` | `OPERA: str`, `TIPOVUELO: Literal["N", "I"]`, `MES: int` | `MES` must be 1–12; `OPERA` must be a known airline |
+| `PredictRequest` | `flights: List[FlightInput]` | — |
+
+`TIPOVUELO` is validated statically via `Literal["N", "I"]` — no custom validator needed.
+
+`OPERA` is validated against a module-level set `KNOWN_AIRLINES` extracted directly from the dataset's unique values (23 airlines total).
+
+#### Validators (Pydantic v1 syntax)
+
+Pydantic v1 (`~1.10.13`) is pinned in `requirements.txt`, so `@validator` is used instead of the v2 `@field_validator`:
+
+```python
+@validator("MES")
+def mes_must_be_valid(cls, v: int) -> int:
+    if not (1 <= v <= 12):
+        raise ValueError("MES must be between 1 and 12")
+    return v
+
+@validator("OPERA")
+def opera_must_be_known(cls, v: str) -> str:
+    if v not in KNOWN_AIRLINES:
+        raise ValueError(f"Unknown airline: '{v}'")
+    return v
+```
+
+#### Exception handler: 422 → 400
+
+FastAPI returns `422 Unprocessable Entity` by default for `RequestValidationError`, but the test suite asserts `400 Bad Request`. A global exception handler was added to remap the status code:
+
+```python
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=400, content={"detail": exc.errors()})
+```
+
+#### Dependency fix: `httpx<0.28.0`
+
+`starlette 0.27.0`'s `TestClient` passes `app=` to `httpx.Client.__init__()`, which was removed in `httpx 0.28.0`. This caused all API tests to fail with `TypeError: Client.__init__() got an unexpected keyword argument 'app'`.
+
+Fix: added `httpx<0.28.0` to `requirements-test.txt`.
+
+#### Tests passing
+
+```
+test_should_failed_unkown_column_1  PASSED
+test_should_failed_unkown_column_2  PASSED
+test_should_failed_unkown_column_3  PASSED
+```
