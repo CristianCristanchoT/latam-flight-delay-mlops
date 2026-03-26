@@ -326,3 +326,120 @@ test_should_failed_unkown_column_2  PASSED
 test_should_failed_unkown_column_3  PASSED
 test_should_get_predict             PASSED
 ```
+
+---
+
+## Part III — Dockerization (`Dockerfile`)
+
+### 3.1 Dockerfile
+
+The original `Dockerfile` was a placeholder with only `FROM python:latest`. It was completed as follows:
+
+```dockerfile
+FROM python:3.11
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY challenge/ ./challenge/
+CMD ["uvicorn", "challenge.api:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| `python:3.11` instead of `python:latest` | Pins a specific runtime version for reproducibility; avoids breaking changes from future Python releases |
+| `COPY requirements.txt` before `COPY challenge/` | Exploits Docker layer caching — dependencies are only reinstalled when `requirements.txt` changes, not on every code change |
+| `COPY challenge/ ./challenge/` | Copies only the package needed at runtime; data and notebooks are excluded from the image |
+| `uvicorn --host 0.0.0.0 --port 8080` | Binds to all interfaces so the container port is reachable from outside |
+
+---
+
+### 3.2 Model serialization
+
+The original `DelayModel.__init__` initialized `self._model = None` with no loading logic, so the API always returned `[0]` regardless of input.
+
+#### Changes to `challenge/model.py`
+
+**Module-level constant:**
+
+```python
+MODEL_PATH = os.path.join(os.path.dirname(__file__), "model.xgb")
+```
+
+Using `__file__` makes the path relative to the module itself, so it resolves correctly both locally and inside the container (`/app/challenge/model.xgb`).
+
+**Auto-load on init:**
+
+```python
+def __init__(self):
+    self._model = None
+    if os.path.exists(MODEL_PATH):
+        self._model = xgb.XGBClassifier()
+        self._model.load_model(MODEL_PATH)
+        logging.info("Model loaded from %s", MODEL_PATH)
+    else:
+        logging.warning("No trained model found at %s — predictions will return 0", MODEL_PATH)
+```
+
+**Auto-save after training:**
+
+```python
+self._model.fit(features, y)
+self._model.save_model(MODEL_PATH)
+```
+
+#### Training script (`scripts/train.py`)
+
+A one-off training script was added to generate the serialized model artifact:
+
+```python
+import pandas as pd
+from challenge.model import DelayModel
+
+data = pd.read_csv("data/data.csv")
+model = DelayModel()
+features, target = model.preprocess(data, target_column="delay")
+model.fit(features, target)
+```
+
+Run from the project root:
+
+```bash
+PYTHONPATH=. python scripts/train.py
+```
+
+This produces `challenge/model.xgb` (~223 KB), which is committed to the repository and copied into the Docker image via `COPY challenge/ ./challenge/`.
+
+---
+
+### 3.3 Observability — structured logging
+
+Logging was added at two levels to make the service observable at runtime.
+
+#### `challenge/model.py`
+
+| Event | Level | Message |
+|---|---|---|
+| Model file found and loaded | `INFO` | `Model loaded from <path>` |
+| Model file not found | `WARNING` | `No trained model found at <path> — predictions will return 0` |
+
+#### `challenge/api.py`
+
+`logging.basicConfig(level=logging.INFO)` is configured at module load time so that `INFO`-level messages appear in uvicorn's stdout (the default level is `WARNING`).
+
+| Event | Level | Message |
+|---|---|---|
+| Request received | `INFO` | `Predict request received \| flights=[...]` |
+| Inference complete | `INFO` | `Predict result \| predictions=[...] \| inference_time=X.XXms` |
+
+Inference time is measured with `time.perf_counter()` and covers both `preprocess()` and `predict()`.
+
+**Sample log output:**
+
+```
+INFO: Model loaded from /app/challenge/model.xgb
+INFO:     Application startup complete.
+INFO: Predict request received | flights=[{'OPERA': 'American Airlines', 'TIPOVUELO': 'I', 'MES': 1}]
+INFO: Predict result | predictions=[1] | inference_time=12.26ms
+```
