@@ -155,5 +155,7 @@ class DelayModel:
         Returns:
             (List[int]): predicted targets.
         """
+        if self._model is None:
+            return [0] * len(features)
         predictions = self._model.predict(features)
         return predictions.tolist()
