@@ -155,3 +155,22 @@ def fit(self, features: pd.DataFrame, target: pd.DataFrame) -> None:
 ```python
 import xgboost as xgb
 ```
+
+### 1.4 `predict()` Implementation (`challenge/model.py`)
+
+#### What was implemented
+
+The `predict()` method calls the trained model and returns predictions as a plain Python list:
+
+```python
+def predict(self, features: pd.DataFrame) -> List[int]:
+    predictions = self._model.predict(features)
+    return predictions.tolist()
+```
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| `self._model.predict(features)` | Delegates directly to XGBoost; no threshold logic needed since `XGBClassifier` already outputs class labels |
+| `.tolist()` | Converts the `numpy.ndarray` returned by XGBoost to a native `List[int]` as required by the method signature |
