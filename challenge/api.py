@@ -1,9 +1,12 @@
 import fastapi
+import pandas as pd
 from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, validator
 from typing import List, Literal
+
+from challenge.model import DelayModel
 
 KNOWN_AIRLINES = {
     "Aerolineas Argentinas",
@@ -55,6 +58,7 @@ class PredictRequest(BaseModel):
 
 
 app = fastapi.FastAPI()
+_model = DelayModel()
 
 
 @app.exception_handler(RequestValidationError)
@@ -70,4 +74,7 @@ async def get_health() -> dict:
 
 @app.post("/predict", status_code=200)
 async def post_predict(request: PredictRequest) -> dict:
-    return {"predict": []}
+    df = pd.DataFrame([flight.dict() for flight in request.flights])
+    features = _model.preprocess(df)
+    predictions = _model.predict(features)
+    return {"predict": predictions}

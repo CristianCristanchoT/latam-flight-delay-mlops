@@ -95,10 +95,11 @@ class DelayModel:
         """
         data = data.copy()
 
-        data['period_day'] = data['Fecha-I'].apply(_get_period_day)
-        data['high_season'] = data['Fecha-I'].apply(_is_high_season)
-        data['min_diff'] = data.apply(_get_min_diff, axis=1)
-        data['delay'] = np.where(data['min_diff'] > THRESHOLD_IN_MINUTES, 1, 0)
+        if 'Fecha-I' in data.columns and 'Fecha-O' in data.columns:
+            data['period_day'] = data['Fecha-I'].apply(_get_period_day)
+            data['high_season'] = data['Fecha-I'].apply(_is_high_season)
+            data['min_diff'] = data.apply(_get_min_diff, axis=1)
+            data['delay'] = np.where(data['min_diff'] > THRESHOLD_IN_MINUTES, 1, 0)
 
         features = pd.concat([
             pd.get_dummies(data['OPERA'], prefix='OPERA'),

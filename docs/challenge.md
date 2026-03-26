@@ -266,3 +266,63 @@ test_should_failed_unkown_column_1  PASSED
 test_should_failed_unkown_column_2  PASSED
 test_should_failed_unkown_column_3  PASSED
 ```
+
+---
+
+### 2.2 `POST /predict` — Model Integration
+
+#### What was implemented
+
+The `/predict` endpoint now instantiates `DelayModel` at module level and runs the full inference pipeline on each request:
+
+```python
+_model = DelayModel()
+
+@app.post("/predict", status_code=200)
+async def post_predict(request: PredictRequest) -> dict:
+    df = pd.DataFrame([flight.dict() for flight in request.flights])
+    features = _model.preprocess(df)
+    predictions = _model.predict(features)
+    return {"predict": predictions}
+```
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| `_model = DelayModel()` at module level | Single instance shared across all requests; avoids re-instantiating the model on every call |
+| `flight.dict()` → `pd.DataFrame` | Converts the validated Pydantic objects to the DataFrame format expected by `preprocess()` |
+| `_model.preprocess(df)` | Reuses the same feature engineering pipeline used during training; ensures feature consistency |
+| `_model.predict(features)` | Returns `List[int]`; if the model is untrained (`_model is None`), returns `[0] * len(features)` by design |
+
+#### Bug fixed: `preprocess()` required `Fecha-I`/`Fecha-O` columns
+
+`preprocess()` always tried to compute `period_day`, `high_season`, `min_diff`, and `delay` from `Fecha-I` and `Fecha-O`, causing a `KeyError` when called from the API with only `OPERA`, `TIPOVUELO`, `MES`.
+
+Since `TOP_FEATURES` does not include any date-derived columns, that block is safe to skip during inference. The fix guards it behind a column check:
+
+```python
+# Original (INCORRECT — always accesses Fecha-I/Fecha-O)
+data['period_day'] = data['Fecha-I'].apply(_get_period_day)
+data['high_season'] = data['Fecha-I'].apply(_is_high_season)
+data['min_diff'] = data.apply(_get_min_diff, axis=1)
+data['delay'] = np.where(data['min_diff'] > THRESHOLD_IN_MINUTES, 1, 0)
+
+# Fixed — skipped when columns are absent (inference path)
+if 'Fecha-I' in data.columns and 'Fecha-O' in data.columns:
+    data['period_day'] = data['Fecha-I'].apply(_get_period_day)
+    data['high_season'] = data['Fecha-I'].apply(_is_high_season)
+    data['min_diff'] = data.apply(_get_min_diff, axis=1)
+    data['delay'] = np.where(data['min_diff'] > THRESHOLD_IN_MINUTES, 1, 0)
+```
+
+This change is backward-compatible: all model tests still pass because they call `preprocess()` with the full `data.csv` that includes those columns.
+
+#### Tests passing
+
+```
+test_should_failed_unkown_column_1  PASSED
+test_should_failed_unkown_column_2  PASSED
+test_should_failed_unkown_column_3  PASSED
+test_should_get_predict             PASSED
+```
