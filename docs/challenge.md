@@ -101,14 +101,18 @@ The original skeleton used `Union(...)` (function call syntax) instead of `Union
 
 #### Bug fixed: wrong data path in test `setUp`
 
-The test file referenced the CSV with a path relative to the project root (`../data/data.csv`), but pytest resolves paths relative to the working directory where it is invoked. The path was corrected to be relative to `tests/model/`:
+The test file used a hardcoded relative path `../../data/data.csv`. Since pytest is invoked from the project root (`latam-flight-delay-mlops/`), that path resolves two levels above the project root — not to `data/data.csv` inside it — causing a `FileNotFoundError` on every test run.
+
+The fix resolves the path relative to the test file's own location using `pathlib`, making it robust regardless of where pytest is invoked from:
 
 ```python
-# Original (INCORRECT)
-self.data = pd.read_csv(filepath_or_buffer="../data/data.csv")
-
-# Fixed
+# Original (INCORRECT — resolves relative to CWD, not the test file)
 self.data = pd.read_csv(filepath_or_buffer="../../data/data.csv")
+
+# Fixed — always resolves to <project_root>/data/data.csv
+from pathlib import Path
+DATA_PATH = Path(__file__).parent.parent.parent / "data" / "data.csv"
+self.data = pd.read_csv(filepath_or_buffer=DATA_PATH)
 ```
 
 #### Tests passing
