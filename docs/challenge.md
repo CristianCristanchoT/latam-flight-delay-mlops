@@ -530,11 +530,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - run: gcloud auth configure-docker us-central1-docker.pkg.dev
       - run: |
-          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA .
-          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam-repo/api:$GITHUB_SHA .
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam-repo/api:$GITHUB_SHA
       - run: |
           gcloud run deploy latam-delay-api \
-            --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA \
+            --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam-repo/api:$GITHUB_SHA \
             --region us-central1 \
             --platform managed \
             --allow-unauthenticated
@@ -554,6 +554,15 @@ jobs:
 |---|---|
 | `GCP_PROJECT_ID` | GCP project ID (e.g. `latam-flight-delay`) |
 | `GCP_SA_KEY` | Full contents of the Service Account key JSON |
+
+#### Deployed service
+
+| Resource | Value |
+|---|---|
+| **Cloud Run URL** | `https://api-latam-ml-cristian-cristancho-386097529365.us-central1.run.app/` |
+| **Predict endpoint** | `POST https://api-latam-ml-cristian-cristancho-386097529365.us-central1.run.app/predict` |
+| **Region** | `us-central1` |
+| **Artifact Registry repo** | `us-central1-docker.pkg.dev/<PROJECT_ID>/latam-repo/api` |
 
 #### Design decisions
 
