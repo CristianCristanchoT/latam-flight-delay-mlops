@@ -509,4 +509,79 @@ jobs:
 
 ### 4.3 Continuous Delivery (`cd.yml`)
 
-> Pending — will be completed once the cloud deployment target is defined.
+#### Triggers
+
+| Event | Branches |
+|---|---|
+| `push` | `master` |
+
+The pipeline runs only when a commit lands on `master` — typically after a PR is merged and all CI checks have passed.
+
+#### Pipeline steps
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - run: gcloud auth configure-docker us-central1-docker.pkg.dev
+      - run: |
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA .
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA
+      - run: |
+          gcloud run deploy latam-delay-api \
+            --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA \
+            --region us-central1 \
+            --platform managed \
+            --allow-unauthenticated
+```
+
+| Step | Purpose |
+|---|---|
+| `actions/checkout@v3` | Clones the repository into the runner |
+| `google-github-actions/auth@v1` | Authenticates with GCP using a Service Account key stored as a repository secret |
+| `gcloud auth configure-docker` | Configures Docker to push to Artifact Registry in `us-central1` |
+| `docker build` + `docker push` | Builds the image and pushes it tagged with the commit SHA for full traceability |
+| `gcloud run deploy` | Deploys the new image to Cloud Run (`latam-delay-api`) in `us-central1` as a managed, publicly accessible service |
+
+#### Required repository secrets
+
+| Secret | Value |
+|---|---|
+| `GCP_PROJECT_ID` | GCP project ID (e.g. `latam-flight-delay`) |
+| `GCP_SA_KEY` | Full contents of the Service Account key JSON |
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| Image tagged with `$GITHUB_SHA` | Each deployment is uniquely identifiable and traceable to a specific commit; supports rollback by redeploying a previous tag |
+| `--allow-unauthenticated` | Makes the Cloud Run endpoint publicly accessible without extra IAM setup; appropriate for a public prediction API |
+| `--platform managed` | Uses the fully managed Cloud Run environment; no cluster or infrastructure management required |
+| Artifact Registry (`us-central1-docker.pkg.dev`) over Container Registry | Artifact Registry is the current GCP recommendation and supports fine-grained IAM policies |
+
+---
+
+### 4.4 Branch Protection
+
+Both `master` and `develop` branches are protected to enforce code quality before any merge.
+
+#### Rules applied
+
+| Rule | Effect |
+|---|---|
+| **Require status checks to pass** | A PR cannot be merged until the `test` job in `ci.yml` completes successfully (both `make model-test` and `make api-test`) |
+| **Require branches to be up to date** | The PR branch must be current with the base branch before merging, preventing stale-code merges |
+| **Require a pull request before merging** | Direct pushes to `master` and `develop` are blocked; all changes must go through a PR |
+
+#### How this connects CI and CD
+
+```
+feature branch → PR → CI runs (model-test + api-test) → merge to develop/master → CD deploys to Cloud Run
+```
+
+Branch protection ensures the CD pipeline only ever deploys code that has passed the full test suite, creating an unbreakable gate between a failing test and a production deployment.
