@@ -443,3 +443,70 @@ INFO:     Application startup complete.
 INFO: Predict request received | flights=[{'OPERA': 'American Airlines', 'TIPOVUELO': 'I', 'MES': 1}]
 INFO: Predict result | predictions=[1] | inference_time=12.26ms
 ```
+
+---
+
+## Part IV — CI/CD (`.github/workflows/`)
+
+### 4.1 Workflow file location
+
+The original `workflows/` folder at the project root was moved to `.github/workflows/` so GitHub Actions can detect and execute the pipelines automatically:
+
+```
+.github/
+└── workflows/
+    ├── ci.yml   ← Continuous Integration
+    └── cd.yml   ← Continuous Delivery (pending)
+```
+
+---
+
+### 4.2 Continuous Integration (`ci.yml`)
+
+#### Triggers
+
+| Event | Branches |
+|---|---|
+| `push` | `master`, `develop` |
+| `pull_request` | `master`, `develop` |
+
+The pipeline runs on every push and on every PR opened against either main branch, acting as a gate before merges.
+
+#### Pipeline steps
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt -r requirements-test.txt
+      - run: make model-test
+      - run: make api-test
+```
+
+| Step | Purpose |
+|---|---|
+| `actions/checkout@v3` | Clones the repository into the runner |
+| `actions/setup-python@v4` with `3.11` | Matches the Python version used in the Dockerfile |
+| `pip install` | Installs runtime and test dependencies |
+| `make model-test` | Runs the 4 `DelayModel` unit tests with coverage |
+| `make api-test` | Runs the 4 FastAPI endpoint tests with coverage |
+
+#### Design decisions
+
+| Decision | Rationale |
+|---|---|
+| Python `3.11` pinned | Matches the `FROM python:3.11` base image in the Dockerfile — consistent runtime across CI and production |
+| Both `requirements.txt` and `requirements-test.txt` installed | `requirements-test.txt` includes `pytest`, `locust`, `coverage`, and `httpx<0.28.0` which are needed only for testing |
+| `requirements-dev.txt` excluded | Dev dependencies (jupyterlab, matplotlib, seaborn) are not needed in CI |
+| Tests run in order: model → api | API tests depend on `DelayModel` working correctly; model tests are faster and fail early if there is a regression |
+
+---
+
+### 4.3 Continuous Delivery (`cd.yml`)
+
+> Pending — will be completed once the cloud deployment target is defined.
