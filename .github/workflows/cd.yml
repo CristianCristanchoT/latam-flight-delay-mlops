@@ -19,5 +19,5 @@ jobs:
 
       # 3. Build y push de la imagen
       - run: |
-          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA .
-          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam-repo/api:$GITHUB_SHA .
+          docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam-repo/api:$GITHUB_SHA
