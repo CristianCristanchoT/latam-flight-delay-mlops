@@ -21,11 +21,3 @@ jobs:
       - run: |
           docker build -t us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA .
           docker push us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA
-
-      # 4. Deploy a Cloud Run
-      - run: |
-          gcloud run deploy latam-delay-api \
-            --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/latam/api:$GITHUB_SHA \
-            --region us-central1 \
-            --platform managed \
-            --allow-unauthenticated
